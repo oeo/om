@@ -19,7 +19,6 @@
 [![Crates.io](https://img.shields.io/crates/v/om-context.svg)](https://crates.io/crates/om-context)
 [![CI](https://github.com/oeo/om/workflows/CI/badge.svg)](https://github.com/oeo/om/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Downloads](https://img.shields.io/crates/d/om-context.svg)](https://crates.io/crates/om-context)
 
 Feed optimal context to LLMs. Scores files by importance (1-10). Tracks content hashes to skip unchanged files.
 
@@ -56,9 +55,38 @@ Sessions store at `~/.om/sessions/*.json`. List with `ls ~/.om/sessions/`.
 
 Add this to your agent's system instructions (e.g., `~/.claude/CLAUDE.md`):
 
-### Example session (why to use this)
+````markdown
+# Commands: Project Context with om
 
-```bash
+When I say **om**, what I mean is:
+
+```command
+Use the `om` tool to understand codebase structure and ingest files.
+
+Start a session:
+eval $(om session)
+
+Protocol:
+1. om tree --flat              # understand structure
+2. om cat -l 9                 # entry points, README, config
+3. om cat -l 7                 # core source files
+4. om cat -l 5                 # tests and supporting code
+
+On subsequent calls:
+om cat -l 7                    # only changed files returned
+
+The tool tracks file hashes. Unchanged files are automatically skipped.
+
+Cleanup:
+om session clear $OM_SESSION
+```
+
+When I say **om to level N**, run `om cat -l N` and summarize what you learned.
+````
+
+### Example session (I use the keyword "meditate" internally)
+
+```
 ❯ meditate 8
 
 ⏺ I'll begin the level 8 meditation. Let me first ensure the OM session is established and gather the project context.
@@ -182,37 +210,6 @@ Add this to your agent's system instructions (e.g., `~/.claude/CLAUDE.md`):
 
 ✻ Churned for 1m 19s
 ```
-
-### Example agent prompt (adjust as needed)
-
-````markdown
-# Commands: Project Context with om
-
-When I say **om**, what I mean is:
-
-```command
-Use the `om` tool to understand codebase structure and ingest files.
-
-Start a session:
-eval $(om session)
-
-Protocol:
-1. om tree --flat              # understand structure
-2. om cat -l 9                 # entry points, README, config
-3. om cat -l 7                 # core source files
-4. om cat -l 5                 # tests and supporting code
-
-On subsequent calls:
-om cat -l 7                    # only changed files returned
-
-The tool tracks file hashes. Unchanged files are automatically skipped.
-
-Cleanup:
-om session clear $OM_SESSION
-```
-
-When I say **om to level N**, run `om cat -l N` and summarize what you learned.
-````
 
 ## Scoring
 
