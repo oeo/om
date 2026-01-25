@@ -4,8 +4,6 @@ use crate::session::Session;
 pub fn run(args: SessionArgs) -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
         None => smart_init(),
-        Some(SessionCommand::List) => list(),
-        Some(SessionCommand::Show { name }) => show(&name),
         Some(SessionCommand::Clear { name }) => clear(&name),
     }
 }
@@ -21,41 +19,6 @@ fn smart_init() -> Result<(), Box<dyn std::error::Error>> {
             "export OM_SESSION={}; echo 'Session created: {}'",
             session_id, session_id
         );
-    }
-
-    Ok(())
-}
-
-fn list() -> Result<(), Box<dyn std::error::Error>> {
-    let sessions = Session::list_all()?;
-
-    if sessions.is_empty() {
-        println!("No sessions found");
-    } else {
-        println!("Sessions:");
-        for name in sessions {
-            let active = std::env::var("OM_SESSION")
-                .map(|s| s == name)
-                .unwrap_or(false);
-            let marker = if active { " (active)" } else { "" };
-            println!("  {}{}", name, marker);
-        }
-    }
-
-    Ok(())
-}
-
-fn show(name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let session = Session::load(name)?;
-    let entries = session.show();
-
-    if entries.is_empty() {
-        println!("Session '{}' has no tracked files", name);
-    } else {
-        println!("Session '{}' tracked files:", name);
-        for (path, hash) in entries {
-            println!("  {} {}", hash, path);
-        }
     }
 
     Ok(())

@@ -2,7 +2,6 @@ mod cat;
 mod cli;
 mod git;
 mod ignore;
-mod init;
 mod scorer;
 mod session;
 mod session_cmd;
@@ -17,7 +16,6 @@ fn main() {
     let result = match cli.command {
         Commands::Tree(args) => tree::run(args),
         Commands::Cat(args) => cat::run(args),
-        Commands::Init(args) => init::run(args),
         Commands::Session(args) => session_cmd::run(args),
     };
 

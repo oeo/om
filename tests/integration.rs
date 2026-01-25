@@ -122,7 +122,9 @@ fn test_cat_without_session() {
         .arg("10")
         .assert()
         .success()
-        .stdout(predicate::str::contains("# File: README.md"))
+        .stdout(predicate::str::contains("FILE: README.md"))
+        .stdout(predicate::str::contains("LINES:"))
+        .stdout(predicate::str::contains("HASH:"))
         .stdout(predicate::str::contains("# Test Project"));
 }
 
@@ -170,77 +172,6 @@ fn test_session_smart_init() {
         .assert()
         .success()
         .stdout(predicate::str::contains("export OM_SESSION="));
-}
-
-#[test]
-fn test_session_list() {
-    let mut cmd = Command::cargo_bin("om").unwrap();
-    cmd.arg("session").arg("list").assert().success();
-}
-
-#[test]
-fn test_session_show() {
-    let tmp = setup_test_repo();
-    let session_name = format!("test-show-{}", std::process::id());
-
-    let mut cmd = Command::cargo_bin("om").unwrap();
-    cmd.arg("cat")
-        .arg("--path")
-        .arg(tmp.path())
-        .arg("--level")
-        .arg("10")
-        .arg("--session")
-        .arg(&session_name)
-        .assert()
-        .success();
-
-    let mut cmd2 = Command::cargo_bin("om").unwrap();
-    cmd2.arg("session")
-        .arg("show")
-        .arg(&session_name)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("tracked files"));
-
-    let mut cmd3 = Command::cargo_bin("om").unwrap();
-    cmd3.arg("session")
-        .arg("clear")
-        .arg(&session_name)
-        .assert()
-        .success();
-}
-
-#[test]
-fn test_init_local() {
-    let tmp = setup_test_repo();
-    let omignore = tmp.path().join(".omignore");
-
-    let mut cmd = Command::cargo_bin("om").unwrap();
-    cmd.arg("init")
-        .current_dir(tmp.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Created local .omignore"));
-
-    assert!(omignore.exists());
-}
-
-#[test]
-fn test_init_force() {
-    let tmp = setup_test_repo();
-    let omignore = tmp.path().join(".omignore");
-
-    fs::write(&omignore, "existing content\n").unwrap();
-
-    let mut cmd = Command::cargo_bin("om").unwrap();
-    cmd.arg("init")
-        .arg("--force")
-        .current_dir(tmp.path())
-        .assert()
-        .success();
-
-    let content = fs::read_to_string(&omignore).unwrap();
-    assert!(content.contains("Lock files"));
 }
 
 #[test]

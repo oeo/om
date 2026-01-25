@@ -16,9 +16,6 @@ pub enum Commands {
     #[command(about = "Output file contents")]
     Cat(CatArgs),
 
-    #[command(about = "Create .omignore file")]
-    Init(InitArgs),
-
     #[command(about = "Manage sessions")]
     Session(SessionArgs),
 }
@@ -60,15 +57,6 @@ pub struct CatArgs {
 }
 
 #[derive(Parser)]
-pub struct InitArgs {
-    #[arg(short, long, help = "Create global ~/.omignore")]
-    pub global: bool,
-
-    #[arg(short, long, help = "Force overwrite if exists")]
-    pub force: bool,
-}
-
-#[derive(Parser)]
 pub struct SessionArgs {
     #[command(subcommand)]
     pub command: Option<SessionCommand>,
@@ -76,15 +64,6 @@ pub struct SessionArgs {
 
 #[derive(Subcommand)]
 pub enum SessionCommand {
-    #[command(about = "List all sessions")]
-    List,
-
-    #[command(about = "Show files in session")]
-    Show {
-        #[arg(help = "Session name")]
-        name: String,
-    },
-
     #[command(about = "Clear session")]
     Clear {
         #[arg(help = "Session name")]

@@ -64,38 +64,6 @@ impl Session {
         format!("{:x}", hasher.finalize())
     }
 
-    pub fn list_all() -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let sessions_dir = Self::sessions_dir()?;
-
-        if !sessions_dir.exists() {
-            return Ok(Vec::new());
-        }
-
-        let mut sessions = Vec::new();
-        for entry in fs::read_dir(&sessions_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                    sessions.push(name.to_string());
-                }
-            }
-        }
-
-        sessions.sort();
-        Ok(sessions)
-    }
-
-    pub fn show(&self) -> Vec<(String, String)> {
-        let mut entries: Vec<_> = self
-            .files
-            .iter()
-            .map(|(path, hash)| (path.clone(), hash[..8].to_string()))
-            .collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        entries
-    }
-
     pub fn clear(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let sessions_dir = Self::sessions_dir()?;
         let path = sessions_dir.join(format!("{}.json", name));

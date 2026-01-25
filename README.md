@@ -1,15 +1,22 @@
-# om - LLM Context Tool
+```
+          69696969                         69696969
+       6969    696969                   696969    6969
+     969    69  6969696               6969  6969     696
+    969        696969696             696969696969     696
+   969        69696969696           6969696969696      696
+   696      9696969696969           969696969696       969
+    696     696969696969             969696969        969
+     696     696  96969      _=_      9696969  69    696
+       9696    969696      q(-_-)p      696969    6969
+          96969696         '_) (_`         69696969
+             96            /__/  \            69
+             69          _(<_   / )_          96
+            6969        (__\_\_|_/__)        9696
+```
 
-`om` is a CLI tool that scores project files by importance (1-10) and feeds optimal context to LLMs with smart session-based deduplication.
+# om
 
-## What is om?
-
-When working with LLMs on codebases, you want to provide relevant context without overwhelming the model. `om` solves this by:
-
-1. **Scoring files** based on importance (entry points = 10, tests = 5, generated files = 2)
-2. **Smart filtering** to show only what matters
-3. **Session tracking** to avoid re-reading unchanged files
-4. **Tree visualization** to understand project structure at a glance
+Feed optimal context to LLMs. Scores files by importance (1-10). Tracks content hashes to skip unchanged files.
 
 ## Install
 
@@ -17,123 +24,78 @@ When working with LLMs on codebases, you want to provide relevant context withou
 cargo install --path .
 ```
 
-Or build from source:
-
-```bash
-cargo build --release
-sudo cp target/release/om /usr/local/bin/
-```
-
 ## Usage
 
-### Session Management
-
-Sessions track which files have been read to avoid duplication. The smart session command is idempotent:
-
 ```bash
+# Start session (enables deduplication)
 eval $(om session)
+
+# View structure
+om tree                          # tree view with scores
+om tree --flat                   # flat list, sorted by score
+om tree --min-score 8            # filter threshold
+
+# Read files
+om cat -l 9                      # entry points, README, config
+om cat -l 7                      # + core source
+om cat -l 5                      # + tests
+om cat file.rs                   # specific files
+
+# Cleanup
+om session clear $OM_SESSION
 ```
 
-This creates a new session if `OM_SESSION` is not set, or confirms the active session if already set.
+Sessions store at `~/.om/sessions/*.json`. List with `ls ~/.om/sessions/`.
 
-```bash
-om session list
-om session show sess-1234567890
-om session clear sess-1234567890
-```
+## Agent Integration
 
-### Tree View
+Add this to your agent's system instructions (e.g., `~/.claude/CLAUDE.md`):
 
-Show project structure with importance scores:
+````markdown
+# Commands: Project Context with om
 
-```bash
-om tree
-om tree --flat
-om tree --min-score 8
-om tree --depth 3
-```
+When I say **om**, what I mean is:
 
-### Cat Files
+```command
+Use the `om` tool to understand codebase structure and ingest files.
 
-Output file contents, optionally using sessions for deduplication:
-
-```bash
-om cat -l 9
-om cat -l 7 --session sess-1234567890
-om cat src/main.rs src/lib.rs
-```
-
-The `-l` (level) flag filters files by minimum score:
-- Level 9-10: Entry points, README, config
-- Level 7-8: Core source files, project files
-- Level 5-6: Supporting code, tests
-- Level 1-4: Low priority, generated files
-
-### Without Sessions
-
-All cat commands work without sessions:
-
-```bash
-om cat -l 7
-```
-
-### With Sessions (Recommended)
-
-```bash
+Start a session:
 eval $(om session)
-om cat -l 9
-om cat -l 7
+
+Protocol:
+1. om tree --flat              # understand structure
+2. om cat -l 9                 # entry points, README, config
+3. om cat -l 7                 # core source files
+4. om cat -l 5                 # tests and supporting code
+
+On subsequent calls:
+om cat -l 7                    # only changed files returned
+
+The tool tracks file hashes. Unchanged files are automatically skipped.
+
+Cleanup:
+om session clear $OM_SESSION
 ```
 
-Files are tracked by content hash. On subsequent runs, unchanged files are skipped.
+When I say **om to level N**, run `om cat -l N` and summarize what you learned.
+````
 
-### Initialize .omignore
+## Scoring
 
-Create a default `.omignore` file:
+| Score | Files |
+|-------|-------|
+| 10 | Entry points (main.rs, index.js), README |
+| 9 | Config (config.*, settings.*) |
+| 8 | Project files (Cargo.toml, package.json, Dockerfile) |
+| 7 | Core source |
+| 5 | Tests |
+| 2 | Generated (*.lock, *.min.js) |
 
-```bash
-om init
-om init --global
-om init --force
-```
+**Modifiers:** Important dirs (+2), domain dirs (+1), test dirs (-2), vendor/dist (-3), root level (+1), deep nesting (-2).
 
-## Scoring System
+## .omignore
 
-| Score | Files | Examples |
-|-------|-------|----------|
-| 10 | Entry points, README | main.rs, index.js, README.md |
-| 9 | Config files | config.toml, settings.json |
-| 8 | Project files | Cargo.toml, package.json, Dockerfile |
-| 7 | Core source (base) | src/handler.rs, lib/utils.py |
-| 5 | Tests | test_main.rs, foo.test.ts |
-| 3 | Init files | __init__.py |
-| 2 | Generated files | *.lock, *.min.js, *.d.ts |
-
-Scores are modified by:
-- Directory importance (src, core: +2 / vendor, dist: -3)
-- Depth (root: +1 / deeply nested: -2)
-- File type (schema files: +1 / docs: -1)
-
-## LLM Integration
-
-For LLM system prompts and meditation protocols, see [PROMPT.md](PROMPT.md).
-
-## Requirements
-
-- Git (uses `git ls-files` to discover files)
-- Rust 1.70+ (for building)
-
-## Configuration
-
-`.omignore` files use glob patterns:
-
-```gitignore
-*.lock
-node_modules/
-**/dist/**
-```
-
-Priority: `~/.omignore` (global) < `.omignore` (local)
+Copy `.omignore.example` to `.omignore` or `~/.omignore`. Supports glob patterns like `.gitignore`.
 
 ## License
 

@@ -147,11 +147,17 @@ fn output_files(
         let line_count = content_str.lines().count();
         total_lines += line_count;
 
-        println!("\n# File: {}", path);
+        let hash = Session::compute_hash(&content);
+        let hash_prefix = &hash[..12];
+
+        println!("\n{}", "=".repeat(80));
+        println!("FILE: {}", path);
+        println!("LINES: {}", line_count);
+        println!("HASH: {}", hash_prefix);
+        println!("{}", "=".repeat(80));
         println!("{}", content_str);
 
         if let Some(ref mut sess) = session {
-            let hash = Session::compute_hash(&content);
             sess.mark_read(&path, &hash);
         }
     }
