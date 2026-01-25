@@ -16,6 +16,11 @@
 
 # om
 
+[![Crates.io](https://img.shields.io/crates/v/om-context.svg)](https://crates.io/crates/om-context)
+[![CI](https://github.com/oeo/om/workflows/CI/badge.svg)](https://github.com/oeo/om/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Downloads](https://img.shields.io/crates/d/om-context.svg)](https://crates.io/crates/om-context)
+
 Feed optimal context to LLMs. Scores files by importance (1-10). Tracks content hashes to skip unchanged files.
 
 ## Install
