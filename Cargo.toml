@@ -1,9 +1,7 @@
 [package]
 name = "om-context"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
-authors = ["oeo"]
-license = "MIT"
 description = "LLM context tool that scores project files by importance"
 repository = "https://github.com/oeo/om"
 readme = "README.md"
