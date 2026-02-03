@@ -12,7 +12,6 @@ mod tree;
 
 use clap::Parser;
 use cli::{Cli, Commands};
-use num_integer::Integer;
 
 pub fn count_tokens(text: &str) -> usize {
     tokens::count_tokens(text, "o200k_base")

@@ -44,6 +44,8 @@ fn cat_by_level(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let min_score = args.level.unwrap_or(5);
 
+    let path = PathBuf::from(args.path.clone().unwrap_or_else(|| ".".to_string()));
+
     let files = git::ls_files(root)?;
     let ignore = IgnorePatterns::load(root);
 
@@ -53,10 +55,31 @@ fn cat_by_level(
         None
     };
 
+    let filter_prefix = if args.git_root {
+        None
+    } else {
+        let abs_path = std::fs::canonicalize(&path)?;
+        let abs_root = std::fs::canonicalize(root)?;
+        abs_path.strip_prefix(&abs_root).ok().and_then(|p| {
+            if p.as_os_str().is_empty() {
+                None
+            } else {
+                p.to_str().map(|s| s.to_string())
+            }
+        })
+    };
+
     let file_strs: Vec<String> = files
         .into_iter()
         .filter_map(|p| p.to_str().map(String::from))
         .filter(|p| !ignore.is_ignored(p))
+        .filter(|p| {
+            if let Some(prefix) = &filter_prefix {
+                p.starts_with(prefix)
+            } else {
+                true
+            }
+        })
         .filter(|p| {
             if let Some(status) = &git_status {
                 if args.staged && status.staged.contains(p) {

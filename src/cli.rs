@@ -85,6 +85,9 @@ pub struct CatArgs {
     #[arg(short = 'S', long, help = "Session name (overrides OM_SESSION env)")]
     pub session: Option<String>,
 
+    #[arg(long, help = "Show entire git repository (ignore path filtering)")]
+    pub git_root: bool,
+
     #[arg(
         long,
         help = "Show only dirty files (modified, added, deleted, untracked)"

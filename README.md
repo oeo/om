@@ -22,8 +22,9 @@
 
 Feed optimal context to LLMs. Scores files by importance (1-10), tracks content hashes for deduplication, and provides structured formats (XML/JSON) for agent consumption.
 
-## v0.2.0 Features
+## v0.2.1 Features
 
+- **Path-Aware Context**: Both `tree` and `cat` commands respect your current working directory by default.
 - **Token Counting**: Precise token counting using `tiktoken-rs` (GPT-4o/GPT-3.5/4 support).
 - **Structured Output**: XML and JSON formats designed for LLM agents.
 - **Git Awareness**: Filter by `--dirty`, `--staged`, or `--unstaged` status.
@@ -110,12 +111,14 @@ format = "text"
 
 ### Path Filtering
 
-By default, `om tree` respects your current working directory:
+By default, `om tree` and `om cat` respect your current working directory:
 
 ```bash
 cd src/              # navigate to subdirectory
 om tree              # shows only files under src/
+om cat -l 7          # reads only files under src/
 om tree --git-root   # override: show entire repository
+om cat -l 7 --git-root  # override: read from entire repository
 ```
 
 You can also filter by path explicitly:
