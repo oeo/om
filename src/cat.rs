@@ -1,29 +1,33 @@
 use crate::cli::CatArgs;
 use crate::git;
 use crate::ignore::IgnorePatterns;
+use crate::output::{self, CatOutput, FileOutput, OutputFormat};
 use crate::scorer::{score_files, ScoredFile};
 use crate::session::Session;
+use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-static BINARY_EXTENSIONS: &[&str] = &[
-    "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "mp3", "mp4", "wav", "avi", "mov", "mkv",
-    "webm", "zip", "tar", "gz", "bz2", "xz", "7z", "rar", "pdf", "doc", "docx", "xls", "xlsx",
-    "ppt", "pptx", "exe", "dll", "so", "dylib", "a", "o", "ttf", "otf", "woff", "woff2", "eot",
-    "db", "sqlite", "sqlite3",
-];
-
 pub fn run(args: CatArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let path = PathBuf::from(args.path.unwrap_or_else(|| ".".to_string()));
+    let path = PathBuf::from(args.path.clone().unwrap_or_else(|| ".".to_string()));
     let root = git::repo_root(&path)?;
 
-    let session_name = args.session.or_else(|| std::env::var("OM_SESSION").ok());
+    let session_name = args
+        .session
+        .clone()
+        .or_else(|| std::env::var("OM_SESSION").ok());
     let mut session = session_name.map(|name| Session::load(&name)).transpose()?;
 
-    if args.files.is_empty() {
-        cat_by_level(&root, args.level, args.no_headers, &mut session)?;
+    let format = if let Some(ref fmt) = args.format {
+        fmt.parse::<OutputFormat>()?
     } else {
-        cat_files(&root, &args.files, args.no_headers, &mut session)?;
+        OutputFormat::Text
+    };
+
+    if args.files.is_empty() {
+        cat_by_level(&root, &args, &mut session, format)?;
+    } else {
+        cat_files(&root, &args.files, &args, &mut session, format)?;
     }
 
     if let Some(ref sess) = session {
@@ -35,33 +39,65 @@ pub fn run(args: CatArgs) -> Result<(), Box<dyn std::error::Error>> {
 
 fn cat_by_level(
     root: &Path,
-    level: Option<i32>,
-    no_headers: bool,
+    args: &CatArgs,
     session: &mut Option<Session>,
+    format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let min_score = level.unwrap_or(5);
+    let min_score = args.level.unwrap_or(5);
 
     let files = git::ls_files(root)?;
     let ignore = IgnorePatterns::load(root);
+
+    let git_status = if args.dirty || args.staged || args.unstaged {
+        Some(git::git_status(root)?)
+    } else {
+        None
+    };
 
     let file_strs: Vec<String> = files
         .into_iter()
         .filter_map(|p| p.to_str().map(String::from))
         .filter(|p| !ignore.is_ignored(p))
+        .filter(|p| {
+            if let Some(status) = &git_status {
+                if args.staged && status.staged.contains(p) {
+                    return true;
+                }
+                if args.unstaged && status.unstaged.contains(p) {
+                    return true;
+                }
+                if args.dirty && status.dirty.contains(p) {
+                    return true;
+                }
+                false
+            } else {
+                true
+            }
+        })
         .collect();
 
-    let mut scored = score_files(file_strs);
+    let jobs = num_cpus::get();
+    let mut scored: Vec<ScoredFile> = if jobs > 1 {
+        use rayon::prelude::*;
+        file_strs
+            .par_iter()
+            .map(|f| crate::scorer::score_file(f))
+            .collect()
+    } else {
+        score_files(file_strs)
+    };
     scored.retain(|f| f.score >= min_score);
     scored.sort_by(|a, b| b.score.cmp(&a.score).then(a.path.cmp(&b.path)));
 
-    output_files(root, &scored, no_headers, session)
+    output_files(root, &scored, args, session, format)
 }
 
 fn cat_files(
     root: &Path,
     files: &[String],
-    no_headers: bool,
+    args: &CatArgs,
     session: &mut Option<Session>,
+    format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let scored: Vec<ScoredFile> = files
         .iter()
@@ -72,20 +108,22 @@ fn cat_files(
         })
         .collect();
 
-    output_files(root, &scored, no_headers, session)
+    output_files(root, &scored, args, session, format)
 }
 
 fn output_files(
     root: &Path,
     files: &[ScoredFile],
-    no_headers: bool,
+    args: &CatArgs,
     session: &mut Option<Session>,
+    format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let no_headers = args.no_headers;
     let mut total_files = 0;
     let mut skipped_binary = 0;
     let mut skipped_session = 0;
     let mut total_lines = 0;
-    let mut output_files = Vec::new();
+    let mut output_files_data = Vec::new();
 
     for f in files {
         let full_path = root.join(&f.path);
@@ -116,71 +154,196 @@ fn output_files(
         }
 
         total_files += 1;
-        output_files.push((f.path.clone(), content));
+        output_files_data.push((f.path.clone(), f.score, content));
     }
 
-    if !no_headers {
-        let project_name = root
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("project");
+    match format {
+        OutputFormat::Text => {
+            if !no_headers {
+                let project_name = root
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("project");
 
-        println!("# Project: {}", project_name);
+                println!("# Project: {}", project_name);
 
-        if let Some(ref sess) = session {
-            println!("# Session: {}", sess.name);
+                if let Some(ref sess) = session {
+                    println!("# Session: {}", sess.name);
+                }
+
+                println!("# Files: {} shown", total_files);
+
+                if skipped_binary > 0 {
+                    println!("# Skipped: {} binary/unreadable", skipped_binary);
+                }
+
+                if skipped_session > 0 {
+                    println!("# Skipped: {} unchanged (session)", skipped_session);
+                }
+            }
+
+            for (path, _score, content) in &output_files_data {
+                let content_str = String::from_utf8_lossy(content);
+                let line_count = content_str.lines().count();
+                total_lines += line_count;
+
+                let hash = Session::compute_hash(content);
+                let hash_prefix = &hash[..12];
+
+                let mut header = format!("FILE: {}\nLINES: {}", path, line_count);
+                if args.tokens {
+                    let tokens = crate::count_tokens(&content_str);
+                    header.push_str(&format!("\nTOKENS: {}", tokens));
+                }
+                header.push_str(&format!("\nHASH: {}", hash_prefix));
+
+                println!("\n{}", "=".repeat(80));
+                println!("{}", header);
+                println!("{}", "=".repeat(80));
+                println!("{}", content_str);
+
+                if let Some(ref mut sess) = session {
+                    sess.mark_read(path, &hash);
+                }
+            }
+
+            if !no_headers && total_files > 0 {
+                println!("\n# Total lines: {}", total_lines);
+            }
         }
+        OutputFormat::Json | OutputFormat::Xml => {
+            let mut file_outputs = Vec::new();
 
-        println!("# Files: {} shown", total_files);
+            for (path, score, content) in &output_files_data {
+                let content_str = String::from_utf8_lossy(content);
+                let line_count = content_str.lines().count();
+                total_lines += line_count;
 
-        if skipped_binary > 0 {
-            println!("# Skipped: {} binary/unreadable", skipped_binary);
+                let hash = Session::compute_hash(content);
+
+                let tokens = if args.tokens {
+                    Some(crate::count_tokens(&content_str))
+                } else {
+                    None
+                };
+
+                file_outputs.push(FileOutput {
+                    path: path.clone(),
+                    score: *score,
+                    tokens,
+                    lines: line_count,
+                    content: Some(content_str.to_string()),
+                });
+
+                if let Some(ref mut sess) = session {
+                    sess.mark_read(path, &hash);
+                }
+            }
+
+            let project_name = root
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("project")
+                .to_string();
+
+            let session_name = session.as_ref().map(|s| s.name.clone());
+
+            let cat_output = CatOutput {
+                project: project_name,
+                session: session_name,
+                files_shown: total_files,
+                skipped_binary,
+                skipped_session,
+                total_lines,
+                files: file_outputs,
+            };
+
+            match format {
+                OutputFormat::Json => output::json::output_cat(&cat_output)?,
+                OutputFormat::Xml => output::xml::output_cat(&cat_output)?,
+                OutputFormat::Text => unreachable!(),
+            }
         }
-
-        if skipped_session > 0 {
-            println!("# Skipped: {} unchanged (session)", skipped_session);
-        }
-    }
-
-    for (path, content) in output_files {
-        let content_str = String::from_utf8_lossy(&content);
-        let line_count = content_str.lines().count();
-        total_lines += line_count;
-
-        let hash = Session::compute_hash(&content);
-        let hash_prefix = &hash[..12];
-
-        println!("\n{}", "=".repeat(80));
-        println!("FILE: {}", path);
-        println!("LINES: {}", line_count);
-        println!("HASH: {}", hash_prefix);
-        println!("{}", "=".repeat(80));
-        println!("{}", content_str);
-
-        if let Some(ref mut sess) = session {
-            sess.mark_read(&path, &hash);
-        }
-    }
-
-    if !no_headers && total_files > 0 {
-        println!("\n# Total lines: {}", total_lines);
     }
 
     Ok(())
 }
 
 fn is_text_file(path: &Path) -> bool {
-    if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-        if BINARY_EXTENSIONS.contains(&ext) {
-            return false;
-        }
+    let mime = mime_guess::from_path(path).first_or_octet_stream();
+    use mime_guess::mime;
+
+    let likely_binary = match mime.type_() {
+        mime::IMAGE | mime::VIDEO | mime::AUDIO => true,
+        mime::APPLICATION => mime.subtype() == mime::OCTET_STREAM,
+        _ => false,
+    };
+
+    if likely_binary {
+        return false;
     }
 
     if let Ok(metadata) = fs::metadata(path) {
-        if metadata.len() > 100_000 {
+        if metadata.len() > 200_000 {
             return false;
         }
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cat_files_explicit_list() {
+        let files = vec!["foo.rs".to_string(), "bar.rs".to_string()];
+        let scored: Vec<ScoredFile> = files
+            .iter()
+            .map(|f| ScoredFile {
+                path: f.clone(),
+                score: 10,
+                reason: "explicit".to_string(),
+            })
+            .collect();
+
+        assert_eq!(scored.len(), 2);
+        assert_eq!(scored[0].path, "foo.rs");
+        assert_eq!(scored[0].score, 10);
+        assert_eq!(scored[1].path, "bar.rs");
+        assert_eq!(scored[1].score, 10);
+    }
+
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_is_text_file() {
+        assert!(is_text_file(Path::new("src/main.rs")));
+
+        let dir = tempdir().unwrap();
+
+        let png_path = dir.path().join("test.png");
+        {
+            let mut f = std::fs::File::create(&png_path).unwrap();
+            f.write_all(&[0_u8; 1024]).unwrap();
+        }
+        assert!(!is_text_file(&png_path));
+
+        let big_txt = dir.path().join("big.txt");
+        {
+            let mut f = std::fs::File::create(&big_txt).unwrap();
+            let data = vec![b'a'; 300_000];
+            f.write_all(&data).unwrap();
+        }
+        assert!(!is_text_file(&big_txt));
+
+        let small_txt = dir.path().join("small.txt");
+        {
+            let mut f = std::fs::File::create(&small_txt).unwrap();
+            f.write_all(b"hello").unwrap();
+        }
+        assert!(is_text_file(&small_txt));
+    }
 }

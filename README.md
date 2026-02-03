@@ -20,7 +20,16 @@
 [![CI](https://github.com/oeo/om/workflows/CI/badge.svg)](https://github.com/oeo/om/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Feed optimal context to LLMs. Scores files by importance (1-10). Tracks content hashes to skip unchanged files.
+Feed optimal context to LLMs. Scores files by importance (1-10), tracks content hashes for deduplication, and provides structured formats (XML/JSON) for agent consumption.
+
+## v0.2.0 Features
+
+- **Token Counting**: Precise token counting using `tiktoken-rs` (GPT-4o/GPT-3.5/4 support).
+- **Structured Output**: XML and JSON formats designed for LLM agents.
+- **Git Awareness**: Filter by `--dirty`, `--staged`, or `--unstaged` status.
+- **Configurable**: Global (`~/.om/config.toml`) and project (`.om.toml`) configuration support.
+- **High Performance**: Parallel processing with Rayon (scans 10k+ files in <1s).
+- **Smart Binary Detection**: MIME-based detection to skip non-text files.
 
 ## Install
 
@@ -35,18 +44,85 @@ cargo install --path .
 eval $(om session)
 
 # View structure
-om tree                          # tree view with scores
+om tree                          # tree view with scores (current directory)
 om tree --flat                   # flat list, sorted by score
-om tree --min-score 8            # filter threshold
+om tree --tokens                 # show token counts per file
+om tree --dirty                  # show only modified/untracked files
+om tree --format json            # output valid JSON
+om tree --jobs 4                 # parallel scanning
 
 # Read files
 om cat -l 9                      # entry points, README, config
 om cat -l 7                      # + core source
-om cat -l 5                      # + tests
-om cat file.rs                   # specific files
+om cat --tokens                  # include token counts in output
+om cat --format xml              # output XML (optimal for Claude)
+om cat --staged                  # read only staged files
 
 # Cleanup
 om session clear $OM_SESSION
+```
+
+### Output Formats
+
+`om` supports multiple formats via the `--format` flag:
+
+- `text` (default): Human-readable ASCII tree or flat list.
+- `json`: Machine-readable JSON including all metadata.
+- `xml`: LLM-optimized XML with CDATA sections (prevents instruction/code mixing).
+
+```bash
+om tree --format xml
+om cat src/main.rs --format json
+```
+
+### Git Integration
+
+Filter your context to only include relevant changes:
+
+```bash
+om tree --dirty      # modified, added, or untracked files
+om cat --staged      # only what you're about to commit
+om cat --unstaged    # local changes not yet staged
+```
+
+### Token Counting
+
+Uses `tiktoken-rs` for precise token estimation:
+
+```bash
+om tree --tokens
+om cat README.md --tokens
+```
+
+### Configuration
+
+`om` looks for configuration in:
+1. `.om.toml` in the repository root.
+2. `~/.om/config.toml` for global defaults.
+
+Example `.om.toml`:
+```toml
+min_score = 7
+depth = 3
+no_color = false
+format = "text"
+```
+
+### Path Filtering
+
+By default, `om tree` respects your current working directory:
+
+```bash
+cd src/              # navigate to subdirectory
+om tree              # shows only files under src/
+om tree --git-root   # override: show entire repository
+```
+
+You can also filter by path explicitly:
+
+```bash
+om tree src          # show only src/ files
+om tree tests        # show only tests/ files
 ```
 
 Sessions store at `~/.om/sessions/*.json`. List with `ls ~/.om/sessions/`.
@@ -84,131 +160,37 @@ om session clear $OM_SESSION
 When I say **om to level N**, run `om cat -l N` and summarize what you learned.
 ````
 
-### Example session (I use the keyword "meditate" internally)
+### Example session
 
 ```
-❯ meditate 8
+❯ om tree --flat --tokens
 
-⏺ I'll begin the level 8 meditation. Let me first ensure the OM session is established and gather the project context.
+  SCORE  TOKENS  PATH
+  10     150     README.md
+  10     850     src/main.rs
+  10     420     src/cli.rs
+  9      120     Cargo.toml
+  7      640     src/tree.rs
+  7      580     src/cat.rs
 
-⏺ Bash(echo $OM_SESSION)
-  ⎿  (No content)
+❯ om cat src/main.rs --format xml
 
-⏺ Bash(eval $(om session))
-  ⎿  Session created: sess-1769308334
-
-⏺ Bash(om tree --flat)
-  ⎿  10 README.md
-     10 src/api/server.ts
-     10 src/index.ts
-     … +134 lines (ctrl+o to expand)
-
-⏺ Bash(om cat -l 8 > /tmp/om-level8.txt)
-  ⎿  (No content)
-
-⏺ Bash(wc -l /tmp/om-level8.txt)
-  ⎿     15005 /tmp/om-level8.txt
-
-⏺ Bash(wc -c /tmp/om-level8.txt)
-  ⎿    432876 /tmp/om-level8.txt
-
-⏺ Level 8 meditation analysis complete.
-
-  Metrics:
-  - Lines: 15,005
-  - Size: 432,876 bytes (~423 KB)
-  - Estimated tokens: ~108,219 tokens
-  - Required reads: 8 chunks of 2000 lines each
-  - Context consumption: ~10.8% of 1M context window
-
-  Scope: Level 8 includes configuration files, chain definitions, Docker compose files, and project documentation.
-
-  Proceed with full ingestion of all 15,005 lines?
-
-❯ yes
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ I need to continue reading the remaining chunks to complete the meditation. Let me continue with the next sections.
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 2000 lines
-
-⏺ Read(/tmp/om-level8.txt)
-  ⎿  Read 1007 lines
-
-⏺ Level 8 meditation complete. I have ingested all 15,005 lines across 57 files.
-
-  Understanding Achieved
-
-  bolt is a proof-of-work blockchain with an account-based model built on Bun and TypeScript. The codebase is well-organized following domain-driven design.
-
-  Architecture Overview
-
-  Core Components:
-  - Blockchain: Account model with nonce tracking, SHA-256 PoW, Bitcoin-style difficulty adjustment
-  - Storage: LMDB primary backend with memory adapter for testing
-  - Networking: TCP binary protocol for data exchange, IPFS used exclusively for peer discovery
-  - Mining: GetBlockTemplate (GBT) protocol for pool compatibility
-  - Wallet: HD wallet derivation (BIP32/BIP39/BIP44) with path m/44'/1057'/account'/change/index
-
-  Currency:
-  - Symbol: BOLT
-  - Base unit: watt (W)
-  - Precision: 1 BOLT = 100,000,000 watts
-  - Max supply: 21M BOLT (2.1 quadrillion watts)
-  - Initial reward: 50 BOLT, halving every 210,000 blocks
-
-  Network Architecture:
-  TCP (port 8333) - Binary protocol for all blockchain data
-  IPFS (port 5001) - Peer discovery only via pubsub
-  API (port 7333) - REST endpoints
-  Metrics (port 7336) - Prometheus endpoint
-
-  Current Status:
-  - 368 passing tests
-  - Headers-first blockchain synchronization
-  - Advanced chain reorganization with pre-validation
-  - Median time validation and timestamp ordering
-  - Comprehensive metrics with Prometheus
-  - Docker-based multi-node deployment
-  - Recent simplification: removed Redis dependency, eliminated unused worker pool
-
-  Key Observations
-
-  Strengths:
-  1. Clean separation of concerns across domain folders
-  2. Consistent use of Bun-native APIs (CryptoHasher, sleep, etc.)
-  3. Proper event-driven architecture
-  4. Comprehensive metrics instrumentation
-  5. Multiple storage adapters with clean interface
-
-  Areas Requiring Attention (from level 8 context):
-  1. Missing addToMempool implementation in LMDB adapter (line 2656-2658 shows it delegates to mempoolStore, but interface mismatch with base adapter)
-  2. Incomplete blockAdded event emitter name inconsistency (fires block:added in some places, blockAdded in others)
-  3. Several .disabled and .skip test files indicating incomplete test coverage
-  4. State reversion not implemented in LMDB store (line 13783)
-  5. GetBlockTemplateService references methods that don't exist on StorageAdapter
-
-  I have complete monk-like clarity on the level 8 context. What would you like to address?
-
-✻ Churned for 1m 19s
+<codebase>
+  <project>om</project>
+  <files>
+    <file path="src/main.rs" score="10" lines="72" tokens="850">
+      <content><![CDATA[
+mod cat;
+mod cli;
+...
+fn main() {
+    let cli = Cli::parse();
+    ...
+}
+      ]]></content>
+    </file>
+  </files>
+</codebase>
 ```
 
 ## Scoring

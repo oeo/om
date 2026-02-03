@@ -22,8 +22,16 @@ pub enum Commands {
 
 #[derive(Parser)]
 pub struct TreeArgs {
-    #[arg(short, long, help = "Project path (default: current directory)")]
+    #[arg(help = "Project path (default: current directory)")]
     pub path: Option<String>,
+
+    #[arg(
+        short = 'j',
+        long,
+        default_value_t = 0,
+        help = "Number of parallel jobs (0 = auto)"
+    )]
+    pub jobs: usize,
 
     #[arg(short = 's', long, help = "Minimum score (1-10)")]
     pub min_score: Option<i32>,
@@ -36,6 +44,27 @@ pub struct TreeArgs {
 
     #[arg(long, help = "Disable colors")]
     pub no_color: bool,
+
+    #[arg(long, help = "Show entire git repository (ignore path filtering)")]
+    pub git_root: bool,
+
+    #[arg(
+        long,
+        help = "Show only dirty files (modified, added, deleted, untracked)"
+    )]
+    pub dirty: bool,
+
+    #[arg(long, help = "Show only staged files")]
+    pub staged: bool,
+
+    #[arg(long, help = "Show only unstaged files")]
+    pub unstaged: bool,
+
+    #[arg(long, help = "Output format: text, json, xml (default: text)")]
+    pub format: Option<String>,
+
+    #[arg(short, long, help = "Show token counts")]
+    pub tokens: bool,
 }
 
 #[derive(Parser)]
@@ -54,6 +83,24 @@ pub struct CatArgs {
 
     #[arg(short = 'S', long, help = "Session name (overrides OM_SESSION env)")]
     pub session: Option<String>,
+
+    #[arg(
+        long,
+        help = "Show only dirty files (modified, added, deleted, untracked)"
+    )]
+    pub dirty: bool,
+
+    #[arg(long, help = "Show only staged files")]
+    pub staged: bool,
+
+    #[arg(long, help = "Show only unstaged files")]
+    pub unstaged: bool,
+
+    #[arg(long, help = "Output format: text, json, xml (default: text)")]
+    pub format: Option<String>,
+
+    #[arg(short, long, help = "Show token counts")]
+    pub tokens: bool,
 }
 
 #[derive(Parser)]

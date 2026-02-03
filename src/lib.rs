@@ -1,10 +1,12 @@
 pub mod git;
 pub mod ignore;
+pub mod output;
 pub mod scorer;
 pub mod session;
 
 pub use git::{ls_files, repo_root};
 pub use ignore::IgnorePatterns;
+pub use output::{CatOutput, FileOutput, OutputFormat, TreeOutput};
 pub use scorer::{score_file, score_files, ScoredFile};
 pub use session::Session;
 

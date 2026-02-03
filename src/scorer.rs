@@ -1,4 +1,5 @@
 use lazy_static::lazy_static;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -227,12 +228,30 @@ pub fn score_file(filepath: &str) -> ScoredFile {
 }
 
 pub fn score_files(files: Vec<String>) -> Vec<ScoredFile> {
-    files.into_iter().map(|f| score_file(&f)).collect()
+    files.into_par_iter().map(|f| score_file(&f)).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_score_always_valid(s in "\\PC*") {
+            let scored = score_file(&s);
+            prop_assert!(scored.score >= 1 && scored.score <= 10);
+        }
+
+        #[test]
+        fn test_depth_score_consistency(s in "[a-z0-9/]{1,100}") {
+            let scored = score_file(&s);
+            let depth = s.split('/').count() - 1;
+            if depth > 4 {
+                prop_assert!(scored.score <= 8);
+            }
+        }
+    }
 
     #[test]
     fn test_entry_points() {
@@ -287,5 +306,39 @@ mod tests {
         let score_root = score_file("file.rs").score;
         let score_deep = score_file("a/b/c/d/e/file.rs").score;
         assert!(score_root > score_deep);
+    }
+
+    #[test]
+    fn test_directory_rules() {
+        assert_eq!(score_file("src/foo.rs").score, 9);
+        assert_eq!(score_file("core/foo.rs").score, 9);
+
+        assert_eq!(score_file("api/foo.rs").score, 8);
+
+        assert_eq!(score_file("tests/foo.rs").score, 5);
+
+        assert_eq!(score_file("vendor/foo.rs").score, 4);
+    }
+
+    #[test]
+    fn test_depth_scoring() {
+        assert_eq!(score_file("foo.rs").score, 8);
+        assert_eq!(score_file("a/foo.rs").score, 7);
+        assert_eq!(score_file("a/b/foo.rs").score, 7);
+        assert_eq!(score_file("a/b/c/foo.rs").score, 6);
+        assert_eq!(score_file("a/b/c/d/foo.rs").score, 6);
+        assert_eq!(score_file("a/b/c/d/e/foo.rs").score, 5);
+    }
+
+    #[test]
+    fn test_schema_files() {
+        assert_eq!(score_file("schema.proto").score, 9);
+        assert_eq!(score_file("api/schema.graphql").score, 9);
+    }
+
+    #[test]
+    fn test_doc_files() {
+        assert_eq!(score_file("docs.md").score, 7);
+        assert_eq!(score_file("README.md").score, 10);
     }
 }

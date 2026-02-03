@@ -61,6 +61,18 @@ impl IgnorePatterns {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    proptest! {
+        #[test]
+        fn test_is_ignored_never_panics(s in "\\PC*") {
+            let patterns = vec![Pattern::new("**/node_modules/**").unwrap()];
+            let ignore = IgnorePatterns { patterns };
+            ignore.is_ignored(&s);
+        }
+    }
 
     #[test]
     fn test_pattern_matching() {
@@ -78,5 +90,39 @@ mod tests {
         assert!(ignore.is_ignored("src/node_modules/foo/bar.js"));
         assert!(ignore.is_ignored("dist/bundle.js"));
         assert!(!ignore.is_ignored("src/main.rs"));
+    }
+
+    #[test]
+    fn test_parse_file_logic() {
+        let mut tmp = NamedTempFile::new().unwrap();
+        writeln!(tmp, "# comment").unwrap();
+        writeln!(tmp, "  ").unwrap();
+        writeln!(tmp, "target/").unwrap();
+        writeln!(tmp, "*.log").unwrap();
+        writeln!(tmp, "foo.txt").unwrap();
+        writeln!(tmp, "**/bar/*").unwrap();
+
+        let patterns = IgnorePatterns::parse_file(tmp.path()).unwrap();
+        let ignore = IgnorePatterns { patterns };
+
+        assert!(ignore.is_ignored("target/debug/exe"));
+        assert!(ignore.is_ignored("some/path/test.log"));
+        assert!(ignore.is_ignored("foo.txt"));
+        assert!(ignore.is_ignored("a/bar/b"));
+        assert!(!ignore.is_ignored("src/main.rs"));
+
+        assert_eq!(ignore.patterns.len(), 4);
+    }
+
+    #[test]
+    fn test_directory_pattern_expansion() {
+        let mut tmp = NamedTempFile::new().unwrap();
+        writeln!(tmp, "dir/").unwrap();
+
+        let patterns = IgnorePatterns::parse_file(tmp.path()).unwrap();
+        let ignore = IgnorePatterns { patterns };
+
+        assert!(ignore.is_ignored("dir/file.txt"));
+        assert!(ignore.is_ignored("dir/subdir/file.txt"));
     }
 }
