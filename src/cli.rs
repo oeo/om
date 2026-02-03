@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "om")]
+#[command(version)]
 #[command(about = "LLM context tool that scores project files by importance", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]

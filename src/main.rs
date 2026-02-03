@@ -12,9 +12,10 @@ mod tree;
 
 use clap::Parser;
 use cli::{Cli, Commands};
+use num_integer::Integer;
 
 pub fn count_tokens(text: &str) -> usize {
-    tokens::count_tokens(text, "o200k_base").unwrap_or_else(|_| (text.len() + 3) / 4)
+    tokens::count_tokens(text, "o200k_base").unwrap_or_else(|_| text.len().div_ceil(4))
 }
 
 fn main() {

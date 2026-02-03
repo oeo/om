@@ -23,7 +23,7 @@ pub fn count_tokens(text: &str, model: &str) -> Result<usize, Box<dyn Error + Se
 #[inline]
 fn fallback_tokens(text: &str) -> usize {
     // Simple heuristic used widely: 1 token ≈ 4 characters.
-    (text.len() + 3) / 4 // round up
+    text.len().div_ceil(4)
 }
 
 #[cfg(test)]

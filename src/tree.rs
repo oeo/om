@@ -114,9 +114,9 @@ pub fn run(args: TreeArgs) -> Result<(), Box<dyn std::error::Error>> {
                     .par_iter()
                     .map(|f| {
                         let full_path = root.join(&f.path);
-                        let tokens = std::fs::read_to_string(&full_path)
-                            .ok()
-                            .map(|c| crate::count_tokens(&c));
+                        let tokens = std::fs::read_to_string(&full_path).ok().map(|c| {
+                            crate::tokens::count_tokens(&c, "cl100k_base").unwrap_or(c.len() / 4)
+                        });
                         FileOutput {
                             path: f.path.clone(),
                             score: f.score,
@@ -158,9 +158,9 @@ pub fn run(args: TreeArgs) -> Result<(), Box<dyn std::error::Error>> {
                     .par_iter()
                     .map(|f| {
                         let full_path = root.join(&f.path);
-                        let tokens = std::fs::read_to_string(&full_path)
-                            .ok()
-                            .map(|c| crate::count_tokens(&c));
+                        let tokens = std::fs::read_to_string(&full_path).ok().map(|c| {
+                            crate::tokens::count_tokens(&c, "cl100k_base").unwrap_or(c.len() / 4)
+                        });
                         FileOutput {
                             path: f.path.clone(),
                             score: f.score,

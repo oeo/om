@@ -4,7 +4,6 @@ use crate::ignore::IgnorePatterns;
 use crate::output::{self, CatOutput, FileOutput, OutputFormat};
 use crate::scorer::{score_files, ScoredFile};
 use crate::session::Session;
-use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -192,7 +191,8 @@ fn output_files(
 
                 let mut header = format!("FILE: {}\nLINES: {}", path, line_count);
                 if args.tokens {
-                    let tokens = crate::count_tokens(&content_str);
+                    let tokens = crate::tokens::count_tokens(&content_str, "cl100k_base")
+                        .unwrap_or(content_str.len() / 4);
                     header.push_str(&format!("\nTOKENS: {}", tokens));
                 }
                 header.push_str(&format!("\nHASH: {}", hash_prefix));
@@ -222,7 +222,10 @@ fn output_files(
                 let hash = Session::compute_hash(content);
 
                 let tokens = if args.tokens {
-                    Some(crate::count_tokens(&content_str))
+                    Some(
+                        crate::tokens::count_tokens(&content_str, "cl100k_base")
+                            .unwrap_or(content_str.len() / 4),
+                    )
                 } else {
                     None
                 };
