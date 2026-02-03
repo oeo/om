@@ -3,6 +3,7 @@ name = "om-context"
 version = "0.2.2"
 edition = "2021"
 description = "LLM context tool that scores project files by importance"
+license = "MIT"
 repository = "https://github.com/oeo/om"
 readme = "README.md"
 
