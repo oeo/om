@@ -224,18 +224,7 @@ fn output_files(
                 let hash = Session::compute_hash(content);
                 let hash_prefix = &hash[..12];
 
-                let display_path = if let Ok(cwd) = std::env::current_dir() {
-                    let full_path = root.join(path);
-                    if let Ok(rel) = full_path.strip_prefix(&cwd) {
-                        rel.to_string_lossy().into_owned()
-                    } else {
-                        full_path.to_string_lossy().into_owned()
-                    }
-                } else {
-                    path.clone()
-                };
-
-                let mut header = format!("FILE: {}\nLINES: {}", display_path, line_count);
+                let mut header = format!("FILE: {}\nLINES: {}", path, line_count);
                 if args.tokens {
                     let tokens = crate::tokens::count_tokens(&content_str, "cl100k_base")
                         .unwrap_or(content_str.len() / 4);
