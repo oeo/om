@@ -64,6 +64,11 @@ fn main() {
                     args.no_headers = no_headers;
                 }
             }
+            if !args.no_cache {
+                if let Some(no_cache) = config.no_cache {
+                    args.no_cache = no_cache;
+                }
+            }
             cat::run(args)
         }
         Commands::Session(args) => session_cmd::run(args),

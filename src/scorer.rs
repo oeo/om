@@ -60,6 +60,19 @@ lazy_static! {
         "dist",
         "build",
         "out",
+        "target",
+        "node_modules",
+        "archived",
+        "legacy",
+        "debug",
+        "research",
+        "tmp",
+        "temp",
+        "backup",
+        "artifacts",
+        ".artifacts",
+        "drizzle",
+        "migrations",
     ];
 }
 
@@ -91,9 +104,17 @@ pub fn score_file(filepath: &str) -> ScoredFile {
     }
 
     if filename == "README.md" || filename == "README" || filename == "README.rst" {
+        let mut score = 10;
+        let components: Vec<&str> = filepath.split('/').collect();
+        for component in components {
+            if LOW_DIRS.contains(&component) || TEST_DIRS.contains(&component) {
+                score = 5;
+                break;
+            }
+        }
         return ScoredFile {
             path: filepath.to_string(),
-            score: 10,
+            score,
             reason: "readme".to_string(),
         };
     }
@@ -115,11 +136,15 @@ pub fn score_file(filepath: &str) -> ScoredFile {
         || filename.ends_with(".d.ts")
         || filename.ends_with(".pyc")
         || filename.contains(".generated.")
+        || filename.ends_with(".backup")
+        || filename.ends_with(".bak")
+        || filename.ends_with(".tmp")
+        || filename.ends_with(".sql")
     {
         return ScoredFile {
             path: filepath.to_string(),
             score: 2,
-            reason: "generated".to_string(),
+            reason: "generated or insignificant".to_string(),
         };
     }
 
@@ -264,7 +289,7 @@ mod tests {
     #[test]
     fn test_readme() {
         assert_eq!(score_file("README.md").score, 10);
-        assert_eq!(score_file("docs/README.md").score, 10);
+        assert_eq!(score_file("docs/README.md").score, 5); // Now 5 because docs is a low priority dir
     }
 
     #[test]

@@ -35,18 +35,37 @@ impl IgnorePatterns {
                 continue;
             }
 
-            let pattern = if line.starts_with("**/") {
-                line.to_string()
-            } else if line.ends_with('/') {
-                format!("{}**", line)
-            } else if line.contains('*') || line.contains('?') {
-                format!("**/{}", line)
+            if line.contains('/') {
+                if line.starts_with("**/") {
+                    if let Ok(p) = Pattern::new(line) {
+                        patterns.push(p);
+                    }
+                } else if line.ends_with('/') {
+                    if let Ok(p) = Pattern::new(&format!("{}**", line)) {
+                        patterns.push(p);
+                    }
+                    if let Ok(p) = Pattern::new(&format!("**/{}**", line)) {
+                        patterns.push(p);
+                    }
+                } else {
+                    if let Ok(p) = Pattern::new(line) {
+                        patterns.push(p);
+                    }
+                    if let Ok(p) = Pattern::new(&format!("**/{}", line)) {
+                        patterns.push(p);
+                    }
+                }
             } else {
-                line.to_string()
-            };
-
-            if let Ok(p) = Pattern::new(&pattern) {
-                patterns.push(p);
+                // Name pattern - match anywhere
+                if let Ok(p) = Pattern::new(line) {
+                    patterns.push(p);
+                }
+                if let Ok(p) = Pattern::new(&format!("**/{}/**", line)) {
+                    patterns.push(p);
+                }
+                if let Ok(p) = Pattern::new(&format!("**/{}", line)) {
+                    patterns.push(p);
+                }
             }
         }
 
@@ -111,7 +130,7 @@ mod tests {
         assert!(ignore.is_ignored("a/bar/b"));
         assert!(!ignore.is_ignored("src/main.rs"));
 
-        assert_eq!(ignore.patterns.len(), 4);
+        assert_eq!(ignore.patterns.len(), 9);
     }
 
     #[test]

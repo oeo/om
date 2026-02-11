@@ -25,6 +25,8 @@ Feed optimal context to LLMs. Scores files by importance (1-10), tracks content 
 ## v0.2.1 Features
 
 - **Path-Aware Context**: Both `tree` and `cat` commands respect your current working directory by default.
+- **Smart Deduplication**: Sessions track content hashes. Use `--no-cache` or set `no_cache = true` in config to disable.
+- **Advanced Scoring**: Context-aware heuristics for monorepos, git status, and modern frameworks (Next.js, Svelte, etc.).
 - **Token Counting**: Precise token counting using `tiktoken-rs` (GPT-4o/GPT-3.5/4 support).
 - **Structured Output**: XML and JSON formats designed for LLM agents.
 - **Git Awareness**: Filter by `--dirty`, `--staged`, or `--unstaged` status.
@@ -58,6 +60,7 @@ om cat -l 7                      # + core source
 om cat --tokens                  # include token counts in output
 om cat --format xml              # output XML (optimal for Claude)
 om cat --staged                  # read only staged files
+om cat --no-cache                # ignore session history, output everything
 
 # Cleanup
 om session clear $OM_SESSION
@@ -107,6 +110,7 @@ min_score = 7
 depth = 3
 no_color = false
 format = "text"
+no_cache = true      # disable session deduplication
 ```
 
 ### Path Filtering

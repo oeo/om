@@ -105,6 +105,9 @@ pub struct CatArgs {
 
     #[arg(short, long, help = "Show token counts")]
     pub tokens: bool,
+
+    #[arg(long, help = "Disable session caching (deduplication)")]
+    pub no_cache: bool,
 }
 
 #[derive(Parser)]

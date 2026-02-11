@@ -11,6 +11,7 @@ pub struct Config {
     pub git_root: Option<bool>,
     pub level: Option<i32>,
     pub no_headers: Option<bool>,
+    pub no_cache: Option<bool>,
 }
 
 impl Config {
@@ -35,6 +36,9 @@ impl Config {
         }
         if other.no_headers.is_some() {
             self.no_headers = other.no_headers;
+        }
+        if other.no_cache.is_some() {
+            self.no_cache = other.no_cache;
         }
     }
 }

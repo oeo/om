@@ -180,10 +180,12 @@ fn output_files(
         };
 
         if let Some(ref sess) = session {
-            let hash = Session::compute_hash(&content);
-            if sess.was_read(&f.path, &hash) {
-                skipped_session += 1;
-                continue;
+            if !args.no_cache {
+                let hash = Session::compute_hash(&content);
+                if sess.was_read(&f.path, &hash) {
+                    skipped_session += 1;
+                    continue;
+                }
             }
         }
 
@@ -238,7 +240,9 @@ fn output_files(
                 println!("{}", content_str);
 
                 if let Some(ref mut sess) = session {
-                    sess.mark_read(path, &hash);
+                    if !args.no_cache {
+                        sess.mark_read(path, &hash);
+                    }
                 }
             }
 
@@ -274,7 +278,9 @@ fn output_files(
                 });
 
                 if let Some(ref mut sess) = session {
-                    sess.mark_read(path, &hash);
+                    if !args.no_cache {
+                        sess.mark_read(path, &hash);
+                    }
                 }
             }
 
