@@ -44,9 +44,21 @@ pub fn output_cat(data: &CatOutput) -> Result<(), Box<dyn Error>> {
     }
 
     write_element(&mut writer, "files_shown", &data.files_shown.to_string())?;
-    write_element(&mut writer, "skipped_binary", &data.skipped_binary.to_string())?;
-    write_element(&mut writer, "skipped_unreadable", &data.skipped_unreadable.to_string())?;
-    write_element(&mut writer, "skipped_session", &data.skipped_session.to_string())?;
+    write_element(
+        &mut writer,
+        "skipped_binary",
+        &data.skipped_binary.to_string(),
+    )?;
+    write_element(
+        &mut writer,
+        "skipped_unreadable",
+        &data.skipped_unreadable.to_string(),
+    )?;
+    write_element(
+        &mut writer,
+        "skipped_session",
+        &data.skipped_session.to_string(),
+    )?;
     write_element(&mut writer, "total_lines", &data.total_lines.to_string())?;
 
     if !data.skipped_binary_paths.is_empty() {

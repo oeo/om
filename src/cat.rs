@@ -507,10 +507,19 @@ mod tests {
         let collected = collect_output(dir.path(), &files, &mut session, true, false).unwrap();
         let text = render_text(&collected, false, false);
 
-        assert!(text.contains("# Skipped: 1 binary"), "missing binary skip line");
+        assert!(
+            text.contains("# Skipped: 1 binary"),
+            "missing binary skip line"
+        );
         assert!(text.contains("#   - logo.png"), "missing binary path");
-        assert!(text.contains("# Skipped: 1 unreadable"), "missing unreadable skip line");
-        assert!(text.contains("#   - corrupt.txt"), "missing unreadable path");
+        assert!(
+            text.contains("# Skipped: 1 unreadable"),
+            "missing unreadable skip line"
+        );
+        assert!(
+            text.contains("#   - corrupt.txt"),
+            "missing unreadable path"
+        );
     }
 
     #[test]
