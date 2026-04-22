@@ -48,7 +48,12 @@ pub struct CatOutput {
     pub session: Option<String>,
     pub files_shown: usize,
     pub skipped_binary: usize,
+    pub skipped_unreadable: usize,
     pub skipped_session: usize,
     pub total_lines: usize,
     pub files: Vec<FileOutput>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped_binary_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped_unreadable_paths: Vec<String>,
 }

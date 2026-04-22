@@ -20,19 +20,9 @@
 [![CI](https://github.com/oeo/om/workflows/CI/badge.svg)](https://github.com/oeo/om/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Feed optimal context to LLMs. Scores files by importance (1-10), tracks content hashes for deduplication, and provides structured formats (XML/JSON) for agent consumption.
+`om` feeds your codebase to LLMs without wasting context. It scores every file by importance (1-10), outputs only what matters, and tracks what has already been sent so repeated calls skip unchanged files automatically.
 
-## v0.2.1 Features
-
-- **Path-Aware Context**: Both `tree` and `cat` commands respect your current working directory by default.
-- **Smart Deduplication**: Sessions track content hashes. Use `--no-cache` or set `no_cache = true` in config to disable.
-- **Advanced Scoring**: Context-aware heuristics for monorepos, git status, and modern frameworks (Next.js, Svelte, etc.).
-- **Token Counting**: Precise token counting using `tiktoken-rs` (GPT-4o/GPT-3.5/4 support).
-- **Structured Output**: XML and JSON formats designed for LLM agents.
-- **Git Awareness**: Filter by `--dirty`, `--staged`, or `--unstaged` status.
-- **Configurable**: Global (`~/.om/config.toml`) and project (`.om.toml`) configuration support.
-- **High Performance**: Parallel processing with Rayon (scans 10k+ files in <1s).
-- **Smart Binary Detection**: MIME-based detection to skip non-text files.
+**The workflow problem it solves:** pasting entire codebases into LLM conversations is wasteful and often hits context limits. Manually picking files is tedious. `om` does the selection for you — give it a minimum score and it returns the right files in the right order, deduplicated across the session.
 
 ## Install
 
@@ -40,178 +30,122 @@ Feed optimal context to LLMs. Scores files by importance (1-10), tracks content 
 cargo install --path .
 ```
 
-## Usage
+## The typical workflow
 
 ```bash
-# Start session (enables deduplication)
+# 1. start a session — enables deduplication across calls
 eval $(om session)
 
-# View structure
-om tree                          # tree view with scores (current directory)
-om tree --flat                   # flat list, sorted by score
-om tree --tokens                 # show token counts per file
-om tree --dirty                  # show only modified/untracked files
-om tree --format json            # output valid JSON
-om tree --jobs 4                 # parallel scanning
+# 2. survey the repo
+om tree --flat
 
-# Read files
-om cat -l 9                      # entry points, README, config
-om cat -l 7                      # + core source
-om cat --tokens                  # include token counts in output
-om cat --format xml              # output XML (optimal for Claude)
-om cat --staged                  # read only staged files
-om cat --no-cache                # ignore session history, output everything
+# 3. feed context to the LLM in layers
+om cat -l 9          # entry points, README, config (~critical files)
+om cat -l 7          # core source
+om cat -l 5          # tests and supporting files
 
-# Cleanup
+# on subsequent calls, only files that changed since last read are returned
+om cat -l 7
+
+# 4. clean up
 om session clear $OM_SESSION
 ```
 
-### Output Formats
-
-`om` supports multiple formats via the `--format` flag:
-
-- `text` (default): Human-readable ASCII tree or flat list.
-- `json`: Machine-readable JSON including all metadata.
-- `xml`: LLM-optimized XML with CDATA sections (prevents instruction/code mixing).
-
-```bash
-om tree --format xml
-om cat src/main.rs --format json
-```
-
-### Git Integration
-
-Filter your context to only include relevant changes:
-
-```bash
-om tree --dirty      # modified, added, or untracked files
-om cat --staged      # only what you're about to commit
-om cat --unstaged    # local changes not yet staged
-```
-
-### Token Counting
-
-Uses `tiktoken-rs` for precise token estimation:
-
-```bash
-om tree --tokens
-om cat README.md --tokens
-```
-
-### Configuration
-
-`om` looks for configuration in:
-1. `.om.toml` in the repository root.
-2. `~/.om/config.toml` for global defaults.
-
-Example `.om.toml`:
-```toml
-min_score = 7
-depth = 3
-no_color = false
-format = "text"
-no_cache = true      # disable session deduplication
-```
-
-### Path Filtering
-
-By default, `om tree` and `om cat` respect your current working directory:
-
-```bash
-cd src/              # navigate to subdirectory
-om tree              # shows only files under src/
-om cat -l 7          # reads only files under src/
-om tree --git-root   # override: show entire repository
-om cat -l 7 --git-root  # override: read from entire repository
-```
-
-You can also filter by path explicitly:
-
-```bash
-om tree src          # show only src/ files
-om tree tests        # show only tests/ files
-```
-
-Sessions store at `~/.om/sessions/*.json`. List with `ls ~/.om/sessions/`.
-
-## Agent Integration
-
-Add this to your agent's system instructions (e.g., `~/.claude/CLAUDE.md`):
-
-````markdown
-# Commands: Project Context with om
-
-When I say **om**, what I mean is:
-
-```command
-Use the `om` tool to understand codebase structure and ingest files.
-
-Start a session:
-eval $(om session)
-
-Protocol:
-1. om tree --flat              # understand structure
-2. om cat -l 9                 # entry points, README, config
-3. om cat -l 7                 # core source files
-4. om cat -l 5                 # tests and supporting code
-
-On subsequent calls:
-om cat -l 7                    # only changed files returned
-
-The tool tracks file hashes. Unchanged files are automatically skipped.
-
-Cleanup:
-om session clear $OM_SESSION
-```
-
-When I say **om to level N**, run `om cat -l N` and summarize what you learned.
-````
-
-### Example session
-
-```
-❯ om tree --flat --tokens
-
-  SCORE  TOKENS  PATH
-  10     150     README.md
-  10     850     src/main.rs
-  10     420     src/cli.rs
-  9      120     Cargo.toml
-  7      640     src/tree.rs
-  7      580     src/cat.rs
-
-❯ om cat src/main.rs --format xml
-
-<codebase>
-  <project>om</project>
-  <files>
-    <file path="src/main.rs" score="10" lines="72" tokens="850">
-      <content><![CDATA[
-mod cat;
-mod cli;
-...
-fn main() {
-    let cli = Cli::parse();
-    ...
-}
-      ]]></content>
-    </file>
-  </files>
-</codebase>
-```
+Sessions store content hashes. If a file hasn't changed since the LLM last saw it, `om cat` skips it. This means you can call `om cat -l 7` repeatedly throughout a conversation and only ever send new information.
 
 ## Scoring
 
+Files are scored 1-10. Pass `-l N` to set the minimum.
+
 | Score | Files |
 |-------|-------|
-| 10 | Entry points (main.rs, index.js), README |
-| 9 | Config (config.*, settings.*) |
-| 8 | Project files (Cargo.toml, package.json, Dockerfile) |
+| 10 | Entry points (`main.rs`, `index.js`), `README` |
+| 9 | Config files (`config.*`, `settings.*`) |
+| 8 | Project files (`Cargo.toml`, `package.json`, `Dockerfile`) |
 | 7 | Core source |
 | 5 | Tests |
-| 2 | Generated (*.lock, *.min.js) |
+| 2 | Generated (`*.lock`, `*.min.js`) |
 
-**Modifiers:** Important dirs (+2), domain dirs (+1), test dirs (-2), vendor/dist (-3), root level (+1), deep nesting (-2).
+**Directory modifiers:** `src/`, `core/`, `lib/` (+2) · `api/`, `models/` (+1) · `tests/` (-2) · `vendor/`, `dist/` (-3) · root level (+1) · deep nesting (-2)
+
+## Output formats
+
+```bash
+om cat -l 7                  # text (default) — human readable
+om cat -l 7 --format xml     # XML with CDATA — optimal for Claude
+om cat -l 7 --format json    # JSON — for programmatic consumption
+```
+
+XML wraps file contents in `<![CDATA[...]]>` sections, which prevents code from being interpreted as XML or conflicting with prompt structure.
+
+## File filtering
+
+`om cat` only outputs files safe for LLM consumption. It silently drops:
+
+- **Binary files** — detected by MIME type and null-byte probe. Extensionless files (`Makefile`, `LICENSE`) are probed by content, not assumed binary.
+- **Invalid UTF-8** — excluded cleanly. No corrupted `\u{FFFD}` characters reach the LLM.
+- **Empty files** — zero-byte files produce no output block.
+
+Skipped files are reported by path so the LLM knows what was excluded:
+
+```
+# Skipped: 2 binary
+#   - assets/logo.png
+#   - build/app.wasm
+# Skipped: 1 unreadable (read error or invalid UTF-8)
+#   - data/legacy.bin
+```
+
+JSON and XML output include `skipped_binary_paths` and `skipped_unreadable_paths` arrays.
+
+## Git integration
+
+```bash
+om tree --dirty        # only modified/untracked files
+om cat --staged        # only staged files
+om cat --unstaged      # only unstaged files
+```
+
+## Path filtering
+
+Commands default to the current working directory. Use `--git-root` to scan the whole repo.
+
+```bash
+cd src/ && om cat -l 7          # only files under src/
+om cat -l 7 --git-root          # entire repository
+om tree tests                   # explicit path filter
+```
+
+## Configuration
+
+`om` loads config from `~/.om/config.toml` (global) then `.om.toml` at the repo root. Repo config wins.
+
+```toml
+min_score = 7
+depth     = 3
+no_color  = false
+format    = "text"
+no_cache  = false
+```
+
+## Agent integration
+
+Add to your agent's system instructions (`~/.claude/CLAUDE.md`):
+
+````markdown
+When I say **meditate** or **meditate N**:
+
+```command
+Use `om` to ingest the codebase.
+
+1. om tree --flat              # understand structure
+2. om cat -l 9                 # entry points, README, config
+3. om cat -l 7                 # core source
+4. om cat -l 5                 # tests and supporting code
+
+On subsequent calls, om cat only returns files that changed.
+```
+````
 
 ## .omignore
 

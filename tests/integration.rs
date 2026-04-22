@@ -131,10 +131,14 @@ fn test_cat_without_session() {
 #[test]
 fn test_cat_with_session() {
     let tmp = setup_test_repo();
+    // use an isolated HOME so the user's global config (e.g. no_cache = true) doesn't
+    // interfere with session deduplication behavior
+    let home = TempDir::new().unwrap();
     let session_name = format!("test-session-{}", std::process::id());
 
     let mut cmd = Command::cargo_bin("om").unwrap();
-    cmd.arg("cat")
+    cmd.env("HOME", home.path())
+        .arg("cat")
         .arg("--path")
         .arg(tmp.path())
         .arg("--level")
@@ -146,7 +150,8 @@ fn test_cat_with_session() {
         .stdout(predicate::str::contains("# Session:"));
 
     let mut cmd2 = Command::cargo_bin("om").unwrap();
-    cmd2.arg("cat")
+    cmd2.env("HOME", home.path())
+        .arg("cat")
         .arg("--path")
         .arg(tmp.path())
         .arg("--level")
@@ -158,7 +163,8 @@ fn test_cat_with_session() {
         .stdout(predicate::str::contains("unchanged (session)"));
 
     let mut cmd3 = Command::cargo_bin("om").unwrap();
-    cmd3.arg("session")
+    cmd3.env("HOME", home.path())
+        .arg("session")
         .arg("clear")
         .arg(&session_name)
         .assert()

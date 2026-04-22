@@ -44,17 +44,28 @@ pub fn output_cat(data: &CatOutput) -> Result<(), Box<dyn Error>> {
     }
 
     write_element(&mut writer, "files_shown", &data.files_shown.to_string())?;
-    write_element(
-        &mut writer,
-        "skipped_binary",
-        &data.skipped_binary.to_string(),
-    )?;
-    write_element(
-        &mut writer,
-        "skipped_session",
-        &data.skipped_session.to_string(),
-    )?;
+    write_element(&mut writer, "skipped_binary", &data.skipped_binary.to_string())?;
+    write_element(&mut writer, "skipped_unreadable", &data.skipped_unreadable.to_string())?;
+    write_element(&mut writer, "skipped_session", &data.skipped_session.to_string())?;
     write_element(&mut writer, "total_lines", &data.total_lines.to_string())?;
+
+    if !data.skipped_binary_paths.is_empty() {
+        let skipped = BytesStart::new("skipped_binary_files");
+        writer.write_event(Event::Start(skipped.borrow()))?;
+        for path in &data.skipped_binary_paths {
+            write_element(&mut writer, "file", path)?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("skipped_binary_files")))?;
+    }
+
+    if !data.skipped_unreadable_paths.is_empty() {
+        let skipped = BytesStart::new("skipped_unreadable_files");
+        writer.write_event(Event::Start(skipped.borrow()))?;
+        for path in &data.skipped_unreadable_paths {
+            write_element(&mut writer, "file", path)?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("skipped_unreadable_files")))?;
+    }
 
     let files = BytesStart::new("files");
     writer.write_event(Event::Start(files.borrow()))?;
