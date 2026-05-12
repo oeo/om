@@ -56,6 +56,11 @@ pub fn output_cat(data: &CatOutput) -> Result<(), Box<dyn Error>> {
     )?;
     write_element(
         &mut writer,
+        "skipped_too_large",
+        &data.skipped_too_large.to_string(),
+    )?;
+    write_element(
+        &mut writer,
         "skipped_session",
         &data.skipped_session.to_string(),
     )?;
@@ -77,6 +82,15 @@ pub fn output_cat(data: &CatOutput) -> Result<(), Box<dyn Error>> {
             write_element(&mut writer, "file", path)?;
         }
         writer.write_event(Event::End(BytesEnd::new("skipped_unreadable_files")))?;
+    }
+
+    if !data.skipped_too_large_paths.is_empty() {
+        let skipped = BytesStart::new("skipped_too_large_files");
+        writer.write_event(Event::Start(skipped.borrow()))?;
+        for path in &data.skipped_too_large_paths {
+            write_element(&mut writer, "file", path)?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("skipped_too_large_files")))?;
     }
 
     let files = BytesStart::new("files");

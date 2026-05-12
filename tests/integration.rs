@@ -474,3 +474,77 @@ fn test_rayon_jobs() {
         .assert()
         .success();
 }
+
+#[test]
+fn test_too_large_files_separate_from_binary() {
+    let tmp = setup_test_repo();
+    let tmp_path = tmp.path();
+
+    // create a file over 512KB — should be reported as "too large", not "binary"
+    let big_content = "a".repeat(600_000);
+    fs::write(tmp_path.join("huge.rs"), &big_content).unwrap();
+
+    StdCommand::new("git")
+        .args(&["add", "-A"])
+        .current_dir(tmp_path)
+        .output()
+        .unwrap();
+
+    StdCommand::new("git")
+        .args(&["commit", "-m", "add huge file"])
+        .current_dir(tmp_path)
+        .output()
+        .unwrap();
+
+    let mut cmd = Command::cargo_bin("om").unwrap();
+    cmd.arg("cat")
+        .arg("--path")
+        .arg(tmp_path)
+        .arg("--level")
+        .arg("1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("too large"))
+        .stdout(predicate::str::contains("huge.rs"));
+}
+
+#[test]
+fn test_typescript_files_not_skipped_as_binary() {
+    let tmp = setup_test_repo();
+    let tmp_path = tmp.path();
+
+    fs::write(
+        tmp_path.join("app.ts"),
+        "export function hello(): string { return 'hi'; }\n",
+    )
+    .unwrap();
+    fs::write(
+        tmp_path.join("component.tsx"),
+        "export const App = () => <div>Hello</div>;\n",
+    )
+    .unwrap();
+
+    StdCommand::new("git")
+        .args(&["add", "-A"])
+        .current_dir(tmp_path)
+        .output()
+        .unwrap();
+
+    StdCommand::new("git")
+        .args(&["commit", "-m", "add ts files"])
+        .current_dir(tmp_path)
+        .output()
+        .unwrap();
+
+    let mut cmd = Command::cargo_bin("om").unwrap();
+    cmd.arg("cat")
+        .arg("--path")
+        .arg(tmp_path)
+        .arg("--level")
+        .arg("1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("FILE: app.ts"))
+        .stdout(predicate::str::contains("FILE: component.tsx"))
+        .stdout(predicate::str::contains("binary").not());
+}

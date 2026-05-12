@@ -161,9 +161,11 @@ fn collect_output(
 ) -> Result<CollectedOutput, Box<dyn std::error::Error>> {
     let mut skipped_binary = 0;
     let mut skipped_unreadable = 0;
+    let mut skipped_too_large = 0;
     let mut skipped_session = 0;
     let mut skipped_binary_paths: Vec<String> = Vec::new();
     let mut skipped_unreadable_paths: Vec<String> = Vec::new();
+    let mut skipped_too_large_paths: Vec<String> = Vec::new();
     let mut file_contents: Vec<(String, i32, Vec<u8>, String)> = Vec::new();
 
     for f in files {
@@ -173,10 +175,18 @@ fn collect_output(
             continue;
         }
 
-        if !is_text_file(&full_path) {
-            skipped_binary += 1;
-            skipped_binary_paths.push(f.path.clone());
-            continue;
+        match check_file(&full_path) {
+            FileSkipReason::Binary => {
+                skipped_binary += 1;
+                skipped_binary_paths.push(f.path.clone());
+                continue;
+            }
+            FileSkipReason::TooLarge => {
+                skipped_too_large += 1;
+                skipped_too_large_paths.push(f.path.clone());
+                continue;
+            }
+            FileSkipReason::None => {}
         }
 
         let raw = match fs::read(&full_path) {
@@ -264,11 +274,13 @@ fn collect_output(
             files_shown: file_contents.len(),
             skipped_binary,
             skipped_unreadable,
+            skipped_too_large,
             skipped_session,
             total_lines,
             files: file_outputs,
             skipped_binary_paths,
             skipped_unreadable_paths,
+            skipped_too_large_paths,
         },
         file_contents,
     })
@@ -290,6 +302,17 @@ fn render_text(collected: &CollectedOutput, no_headers: bool, show_tokens: bool)
         if data.skipped_binary > 0 {
             out.push_str(&format!("# Skipped: {} binary\n", data.skipped_binary));
             for path in &data.skipped_binary_paths {
+                out.push_str(&format!("#   - {}\n", path));
+            }
+        }
+
+        if data.skipped_too_large > 0 {
+            out.push_str(&format!(
+                "# Skipped: {} too large (>{}KB)\n",
+                data.skipped_too_large,
+                MAX_FILE_SIZE / 1000
+            ));
+            for path in &data.skipped_too_large_paths {
                 out.push_str(&format!("#   - {}\n", path));
             }
         }
@@ -358,8 +381,45 @@ fn output_files(
     Ok(())
 }
 
-fn is_text_file(path: &Path) -> bool {
+/// max file size om will read (512 KB)
+const MAX_FILE_SIZE: u64 = 512_000;
+
+#[derive(Debug, PartialEq)]
+enum FileSkipReason {
+    None,
+    Binary,
+    TooLarge,
+}
+
+fn check_file(path: &Path) -> FileSkipReason {
     use mime_guess::mime;
+
+    // check size first — applies regardless of extension
+    if let Ok(metadata) = fs::metadata(path) {
+        if metadata.len() > MAX_FILE_SIZE {
+            return FileSkipReason::TooLarge;
+        }
+    }
+
+    // known text extensions that mime_guess misidentifies (e.g. .ts -> video/mp2t)
+    let known_text = [
+        "ts", "tsx", "mts", "cts", "svelte", "vue", "astro", "mdx",
+    ];
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        if known_text.contains(&ext) {
+            // still probe for null bytes to catch truly binary files with wrong extensions
+            if let Ok(mut file) = fs::File::open(path) {
+                use std::io::Read;
+                let mut buf = [0u8; 8192];
+                if let Ok(n) = file.read(&mut buf) {
+                    if buf[..n].contains(&0u8) {
+                        return FileSkipReason::Binary;
+                    }
+                }
+            }
+            return FileSkipReason::None;
+        }
+    }
 
     let mime = mime_guess::from_path(path).first();
 
@@ -371,16 +431,10 @@ fn is_text_file(path: &Path) -> bool {
             _ => false,
         };
         if is_binary {
-            return false;
+            return FileSkipReason::Binary;
         }
     }
     // if mime_guess has no opinion (unknown/no extension), fall through to byte probe
-
-    if let Ok(metadata) = fs::metadata(path) {
-        if metadata.len() > 200_000 {
-            return false;
-        }
-    }
 
     // probe the first 8KB for null bytes — the definitive binary signal
     if let Ok(mut file) = fs::File::open(path) {
@@ -388,12 +442,12 @@ fn is_text_file(path: &Path) -> bool {
         let mut buf = [0u8; 8192];
         if let Ok(n) = file.read(&mut buf) {
             if buf[..n].contains(&0u8) {
-                return false;
+                return FileSkipReason::Binary;
             }
         }
     }
 
-    true
+    FileSkipReason::None
 }
 
 #[cfg(test)]
@@ -483,6 +537,28 @@ mod tests {
         assert_eq!(result.data.files_shown, 0);
         assert_eq!(result.data.skipped_binary, 1);
         assert_eq!(result.data.skipped_binary_paths, vec!["app.wasm"]);
+        assert_eq!(result.data.skipped_unreadable, 0);
+        assert_eq!(result.data.skipped_too_large, 0);
+    }
+
+    #[test]
+    fn test_too_large_file_goes_to_skipped_too_large() {
+        let dir = tempdir().unwrap();
+        let big = dir.path().join("huge.ts");
+        {
+            let mut f = std::fs::File::create(&big).unwrap();
+            let data = vec![b'a'; 600_000];
+            f.write_all(&data).unwrap();
+        }
+
+        let files = vec![scored("huge.ts")];
+        let mut session = None;
+        let result = collect_output(dir.path(), &files, &mut session, true, false).unwrap();
+
+        assert_eq!(result.data.files_shown, 0);
+        assert_eq!(result.data.skipped_too_large, 1);
+        assert_eq!(result.data.skipped_too_large_paths, vec!["huge.ts"]);
+        assert_eq!(result.data.skipped_binary, 0);
         assert_eq!(result.data.skipped_unreadable, 0);
     }
 
@@ -575,8 +651,8 @@ mod tests {
     }
 
     #[test]
-    fn test_is_text_file() {
-        assert!(is_text_file(Path::new("src/main.rs")));
+    fn test_check_file() {
+        assert_eq!(check_file(Path::new("src/main.rs")), FileSkipReason::None);
 
         let dir = tempdir().unwrap();
 
@@ -585,22 +661,22 @@ mod tests {
             let mut f = std::fs::File::create(&png_path).unwrap();
             f.write_all(&[0_u8; 1024]).unwrap();
         }
-        assert!(!is_text_file(&png_path));
+        assert_eq!(check_file(&png_path), FileSkipReason::Binary);
 
         let big_txt = dir.path().join("big.txt");
         {
             let mut f = std::fs::File::create(&big_txt).unwrap();
-            let data = vec![b'a'; 300_000];
+            let data = vec![b'a'; 600_000];
             f.write_all(&data).unwrap();
         }
-        assert!(!is_text_file(&big_txt));
+        assert_eq!(check_file(&big_txt), FileSkipReason::TooLarge);
 
         let small_txt = dir.path().join("small.txt");
         {
             let mut f = std::fs::File::create(&small_txt).unwrap();
             f.write_all(b"hello").unwrap();
         }
-        assert!(is_text_file(&small_txt));
+        assert_eq!(check_file(&small_txt), FileSkipReason::None);
 
         // extensionless text files (Makefile, LICENSE, Dockerfile, etc.)
         // must not be falsely skipped as binary
@@ -609,7 +685,7 @@ mod tests {
             let mut f = std::fs::File::create(&makefile).unwrap();
             f.write_all(b"all:\n\techo done\n").unwrap();
         }
-        assert!(is_text_file(&makefile));
+        assert_eq!(check_file(&makefile), FileSkipReason::None);
 
         // extensionless file with actual binary content (null bytes) must be skipped
         let bin_no_ext = dir.path().join("binary_no_ext");
@@ -617,6 +693,6 @@ mod tests {
             let mut f = std::fs::File::create(&bin_no_ext).unwrap();
             f.write_all(&[0x7f, 0x45, 0x4c, 0x46, 0x00, 0x00]).unwrap();
         }
-        assert!(!is_text_file(&bin_no_ext));
+        assert_eq!(check_file(&bin_no_ext), FileSkipReason::Binary);
     }
 }
